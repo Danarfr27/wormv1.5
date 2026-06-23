@@ -1,0 +1,126 @@
+/*Penambahan file baru css agar ga puyeng liat indexx html jadi 1 - versaagonon*/
+
+@import url("variables.css");
+@import url("layout.css");
+@import url("header.css");
+@import url("components.css");
+@import url("history.css");
+@import url("responsive.css");
+
+/* Right-side navbar styles */
+.right-navbar {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 2200;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.hamburger-btn {
+  width: 44px;
+  height: 44px;
+  background: var(--bg-card);
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 8px;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+}
+.hamburger-line {
+  width: 18px;
+  height: 2px;
+  background: var(--text-primary);
+  display: block;
+  margin: 3px 0;
+  border-radius: 2px;
+  transition: transform 0.2s ease;
+}
+.nav-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100vh;
+  width: 0;
+  max-width: 320px;
+  background: var(--bg-card);
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.4);
+  transform: translateX(100%);
+  transition:
+    transform 0.3s ease,
+    width 0.3s ease;
+  z-index: 2199;
+  overflow: auto;
+  padding: 18px 14px;
+}
+.nav-panel.open {
+  transform: translateX(0);
+  width: 320px;
+}
+.nav-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 12px;
+}
+.close-nav {
+  background: transparent;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: var(--text-primary);
+}
+.nav-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.nav-item {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  padding: 10px;
+  background: transparent;
+  border-radius: 8px;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text-primary);
+  transition: background 0.15s ease;
+}
+.nav-item svg {
+  flex: 0 0 20px;
+  color: var(--text-secondary);
+}
+.nav-item .nav-label {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.nav-item:hover {
+  background: var(--bg-card-light);
+}
+
+@media (max-width: 767px) {
+  .right-navbar {
+    top: 12px;
+    right: 12px;
+  }
+  .nav-panel.open {
+    width: 100%;
+    max-width: 100%;
+  }
+  .hamburger-btn {
+    width: 44px;
+    height: 44px;
+  }
+}
