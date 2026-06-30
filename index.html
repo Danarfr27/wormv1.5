@@ -15,11 +15,11 @@
 </head>
 
 <body data-theme="dark" style="display:none">
-  <script src="/js/auth.js"></script>
-  <script src="/js/auth-guard.js"></script>
+  <script src="/js/auth.js?v=2"></script>
+  <script src="/js/auth-guard.js?v=2"></script>
 
   <!-- Main logic -->
-  <script type="module" src="/js/app.js"></script>
+  <script type="module" src="/js/app.js?v=2"></script>
 
   <!-- Background particles -->
   <div class="particles" id="particles"></div>
@@ -111,6 +111,21 @@
         <div class="input-wrapper">
           <textarea class="chat-input" id="chatInput" placeholder="Apa yang ingin anda tanyakan..." autocomplete="off"
             rows="1"></textarea>
+          <div class="input-toolbar">
+            <label class="upload-btn" for="fileInput" title="Unggah file (TXT, MD, JSON, DOCX, PDF)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M16 16h-2v-4H10v4H8l4 4 4-4zM4 4h10v2H4v12h16V10h2v12H4z" />
+              </svg>
+              <span>File</span>
+            </label>
+            <input id="fileInput" type="file" accept=".txt,.md,.json,.xml,.html,.htm,.csv,.pdf,.docx,.doc" hidden>
+            <div id="selectedFileContainer" class="selected-file-container" hidden>
+              <span id="selectedFileName" class="selected-file-name"></span>
+              <button id="clearSelectedFileBtn" class="clear-file-btn" type="button" aria-label="Batal pilih file" title="Batal pilih file">
+                ×
+              </button>
+            </div>
+          </div>
         </div>
         <button class="send-btn" id="sendBtn">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">

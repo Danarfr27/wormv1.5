@@ -32,19 +32,98 @@ document.addEventListener('DOMContentLoaded', async () => {
 // Send Message
 const sendBtn = document.getElementById('sendBtn');
 const chatInput = document.getElementById('chatInput');
+const fileInput = document.getElementById('fileInput');
+const selectedFileName = document.getElementById('selectedFileName');
+const selectedFileContainer = document.getElementById('selectedFileContainer');
+const clearSelectedFileBtn = document.getElementById('clearSelectedFileBtn');
+let pendingUpload = null;
+
+function updateSelectedFileUI() {
+    const file = fileInput && fileInput.files && fileInput.files[0];
+    const hasFile = !!file;
+    if (selectedFileContainer) {
+        selectedFileContainer.hidden = !hasFile;
+    }
+    if (selectedFileName) {
+        selectedFileName.textContent = hasFile ? file.name : '';
+    }
+}
+
+function clearSelectedFile() {
+    if (fileInput) {
+        fileInput.value = '';
+    }
+    pendingUpload = null;
+    updateSelectedFileUI();
+}
+
+function readFileAsBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            const result = reader.result;
+            const base64 = typeof result === 'string' ? result.split(',')[1] || '' : '';
+            resolve(base64);
+        };
+        reader.onerror = () => reject(new Error('Failed to read file'));
+        reader.readAsDataURL(file);
+    });
+}
+
+async function attachSelectedFileToMessage(messageText) {
+    if (!fileInput || !fileInput.files || fileInput.files.length === 0) return null;
+
+    const file = fileInput.files[0];
+    const base64 = await readFileAsBase64(file);
+    if (!base64) throw new Error('File content is empty');
+
+    const uploadPayload = {
+        filename: file.name,
+        mimetype: file.type || '',
+        contentBase64: base64
+    };
+
+    const response = await fetch('/api/upload_file', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(uploadPayload)
+    });
+
+    if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to parse uploaded file');
+    }
+
+    const data = await response.json();
+    const fileSummary = data.text ? `\n[File: ${file.name}]\n${data.text}` : `\n[File: ${file.name}]`;
+    const finalMessage = messageText ? `${messageText}\n\n${fileSummary}` : fileSummary;
+    clearSelectedFile();
+    return finalMessage;
+}
 
 async function handleSendMessage() {
     const message = chatInput.value.trim();
-    if (!message) return;
+    if (!message && !pendingUpload && (!fileInput || !fileInput.files || fileInput.files.length === 0)) return;
+
+    sendBtn.disabled = true;
+
+    let finalMessage = message;
+    try {
+        finalMessage = await attachSelectedFileToMessage(message);
+    } catch (error) {
+        UI.showNotification(error.message || 'Gagal membaca file');
+        sendBtn.disabled = false;
+        chatInput.focus();
+        return;
+    }
 
     chatInput.value = '';
     chatInput.style.height = 'auto';
-    sendBtn.disabled = true;
 
-    UI.addMessage(message, true);
+    UI.addMessage(finalMessage, true);
     UI.showTyping();
 
-    State.addToConversation("user", message);
+    State.addToConversation("user", finalMessage);
     UI.renderHistorySidebar(State.getConversations(), openConversationById);
 
     try {
@@ -227,6 +306,23 @@ chatInput.addEventListener('input', function () {
     this.style.height = 'auto';
     this.style.height = (this.scrollHeight) + 'px';
 });
+
+if (fileInput) {
+    fileInput.addEventListener('change', () => {
+        const file = fileInput.files && fileInput.files[0];
+        pendingUpload = file ? file.name : null;
+        updateSelectedFileUI();
+    });
+}
+
+if (clearSelectedFileBtn) {
+    clearSelectedFileBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        clearSelectedFile();
+    });
+}
+
+updateSelectedFileUI();
 
 // Clear History
 const clearBtn = document.getElementById('clearHistoryBtn');

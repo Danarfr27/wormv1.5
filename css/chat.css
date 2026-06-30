@@ -333,6 +333,69 @@
   position: relative;
 }
 
+.input-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.upload-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 0.82em;
+  border: 1px solid var(--border-color);
+  transition: all 0.2s ease;
+}
+
+.upload-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  transform: translateY(-1px);
+}
+
+.selected-file-container {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-color);
+  max-width: 280px;
+}
+
+.selected-file-name {
+  font-size: 0.78em;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clear-file-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.clear-file-btn:hover {
+  color: var(--primary);
+}
+
 .chat-input {
   width: 100%;
   padding: 15px 18px;
@@ -438,6 +501,10 @@
     max-width: calc(100% - 24px);
     display: flex;
     align-items: center;
+  }
+
+  .input-toolbar {
+    margin-top: 6px;
   }
 
   .chat-input {
