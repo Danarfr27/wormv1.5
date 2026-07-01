@@ -1,4 +1,4 @@
-// Redirect to login if not authenticated
+// Allow index.html to load directly and treat missing auth as guest access
 (function () {
     function revealApp() {
         if (!document.body) return;
@@ -9,19 +9,20 @@
 
     function runGuard() {
         if (!window.auth) {
-            window.location.href = '/login.html';
+            revealApp();
             return;
         }
 
         auth.isAuthenticated().then(valid => {
             if (!valid) {
-                window.location.href = '/login.html';
+                // No active session; still allow the app to render as guest
+                revealApp();
             } else {
                 revealApp();
             }
         }).catch((e) => {
             console.error('Auth Exception:', e);
-            window.location.href = '/login.html';
+            revealApp();
         });
     }
 
