@@ -34,21 +34,6 @@ export default async function handler(req, res) {
   // Loop mencoba setiap key yang ada
   for (let i = 0; i < apiKeys.length; i++) {
     const currentKey = apiKeys[i].trim();
-    // Dev-only: support simulated keys for local testing.
-    // If a key starts with `SIMULATE_429` we treat it as rate-limited.
-    // If a key starts with `SIMULATE_OK` we return a mock successful response.
-    if (currentKey.startsWith('SIMULATE_')) {
-      if (currentKey === 'SIMULATE_429') {
-        console.warn(`[Simulate] Key ${i} simulating 429`);
-        lastError = { status: 429, message: 'Rate limit exceeded (simulated)' };
-        continue;
-      }
-      if (currentKey.startsWith('SIMULATE_OK')) {
-        finalData = { text: `Simulated response from key ${i}`, message: 'simulated OK' };
-        success = true;
-        break;
-      }
-    }
     const externalApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${currentKey}`;
 
     try {
@@ -93,15 +78,6 @@ export default async function handler(req, res) {
     return res.status(200).json(finalData);
   } else {
     // Jika semua key sudah dicoba dan gagal semua
-    // Jika penyebab utama adalah rate limit (429), kembalikan pesan yang lebih informatif.
-    if (lastError && lastError.status === 429) {
-      return res.status(429).json({
-        error: 'Rate limit',
-        message: 'Semua API key mencapai batas pemakaian (rate limit). saya akan gunakan API key lain atau tunggu reset kuota.',
-        details: lastError
-      });
-    }
-
     return res.status(lastError?.status || 500).json({
       error: 'Generation failed',
       message: 'Semua API Key sedang sibuk atau bermasalah.',
