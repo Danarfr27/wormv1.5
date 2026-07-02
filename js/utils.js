@@ -125,19 +125,48 @@ export async function parseUploadFileText(file) {
     }
 }
 
+function normalizeText(text) {
+    return typeof text === 'string' ? text.trim() : '';
+}
+
+function extractTextFromObject(obj) {
+    if (!obj || typeof obj !== 'object') return '';
+
+    if (typeof obj.text === 'string' && obj.text.trim()) return obj.text.trim();
+    if (typeof obj.generatedText === 'string' && obj.generatedText.trim()) return obj.generatedText.trim();
+    if (typeof obj.generated_text === 'string' && obj.generated_text.trim()) return obj.generated_text.trim();
+    if (typeof obj.output_text === 'string' && obj.output_text.trim()) return obj.output_text.trim();
+
+    if (Array.isArray(obj.parts) && obj.parts.length > 0) {
+        return obj.parts.map(extractTextFromObject).filter(Boolean).join(' ').trim();
+    }
+
+    if (Array.isArray(obj.output) && obj.output.length > 0) {
+        return obj.output.map(extractTextFromObject).filter(Boolean).join(' ').trim();
+    }
+
+    if (obj.content) {
+        return extractTextFromObject(obj.content);
+    }
+
+    if (obj.response) {
+        return extractTextFromObject(obj.response);
+    }
+
+    return '';
+}
+
 export function extractAiReplyText(payload) {
     if (!payload || typeof payload !== 'object') return '';
 
     if (Array.isArray(payload.candidates) && payload.candidates.length > 0) {
         const candidate = payload.candidates[0];
-        const parts = candidate && candidate.content && Array.isArray(candidate.content.parts) ? candidate.content.parts : [];
-        const partText = parts.map(part => part && typeof part.text === 'string' ? part.text : '').join('').trim();
-        if (partText) return partText;
+        const candidateText = extractTextFromObject(candidate);
+        if (candidateText) return candidateText;
     }
 
-    if (typeof payload.text === 'string' && payload.text.trim()) return payload.text.trim();
-    if (typeof payload.reply === 'string' && payload.reply.trim()) return payload.reply.trim();
-    if (typeof payload.message === 'string' && payload.message.trim()) return payload.message.trim();
+    const objectText = extractTextFromObject(payload);
+    if (objectText) return objectText;
 
     if (payload.response && typeof payload.response === 'object') {
         return extractAiReplyText(payload.response);
@@ -147,8 +176,9 @@ export function extractAiReplyText(payload) {
 }
 
 export function buildFallbackAiReply(userMessage) {
-    const cleaned = typeof userMessage === 'string' ? userMessage.trim() : '';
+    const cleaned = normalizeText(userMessage);
     if (!cleaned) {
-        return 'Lu Kebanyakan Nyepam sih memek, wajar apikey lu kena Limit. Bentar gw cariin apikey yang lain biar lu bisa bacot sama gw !.';
+        return 'AI backend sedang sibuk. Coba lagi sebentar lagi.';
     }
+    return 'Maaf, AI tidak memberi jawaban. Coba ulang sekali lagi atau cek koneksi API.';
 }

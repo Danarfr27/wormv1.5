@@ -116,6 +116,43 @@ export async function parseUploadFileText(file) {
     }
 }
 
+export function extractAiReplyText(payload) {
+    if (!payload || typeof payload !== 'object') return '';
+
+    if (Array.isArray(payload.candidates) && payload.candidates.length > 0) {
+        const candidate = payload.candidates[0];
+        if (candidate && candidate.content) {
+            const parts = Array.isArray(candidate.content)
+                ? candidate.content
+                : Array.isArray(candidate.content.parts)
+                    ? candidate.content.parts
+                    : candidate.content.parts && typeof candidate.content.parts === 'object'
+                        ? [candidate.content.parts]
+                        : [];
+            const partText = parts.map(part => part && typeof part.text === 'string' ? part.text : '').join('').trim();
+            if (partText) return partText;
+        }
+    }
+
+    if (typeof payload.text === 'string' && payload.text.trim()) return payload.text.trim();
+    if (typeof payload.reply === 'string' && payload.reply.trim()) return payload.reply.trim();
+    if (typeof payload.message === 'string' && payload.message.trim()) return payload.message.trim();
+
+    if (payload.response && typeof payload.response === 'object') {
+        return extractAiReplyText(payload.response);
+    }
+
+    return '';
+}
+
+export function buildFallbackAiReply(userMessage) {
+    const cleaned = typeof userMessage === 'string' ? userMessage.trim() : '';
+    if (!cleaned) {
+        return 'AI backend sedang sibuk. Coba lagi sebentar lagi.';
+    }
+    return 'Maaf, AI tidak memberi jawaban. Coba ulang sekali lagi atau cek koneksi API.';
+}
+
 export function escapeHtml(str) {
     return str
         .replace(/&/g, "&amp;")

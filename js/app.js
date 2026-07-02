@@ -159,16 +159,31 @@ async function handleSendMessage() {
 
         let data = null;
         if (response.ok) {
-            data = await response.json();
+            try {
+                data = await response.json();
+            } catch (error) {
+                console.warn('Failed to parse JSON from backend', error);
+            }
         } else {
-            console.warn('AI backend unavailable, using fallback response', response.status);
+            const errorText = await response.text().catch(() => '');
+            console.warn('AI backend unavailable, using fallback response', response.status, errorText);
         }
 
         // Prefer explicit `message` field from our backend (chat.js),
         // fall back to other shapes parsed by `extractAiReplyText`.
-        const aiResponse = (data && typeof data.message === 'string' && data.message.trim())
-            ? data.message.trim()
-            : (extractAiReplyText(data) || buildFallbackAiReply(message));
+        let aiResponse = '';
+        if (data && typeof data.message === 'string' && data.message.trim()) {
+            aiResponse = data.message.trim();
+        } else if (data && typeof data.text === 'string' && data.text.trim()) {
+            aiResponse = data.text.trim();
+        } else {
+            aiResponse = extractAiReplyText(data || {});
+        }
+
+        if (!aiResponse) {
+            aiResponse = buildFallbackAiReply(finalMessage);
+            console.warn('Using fallback AI response because backend payload could not be parsed.', { data });
+        }
 
         State.addToConversation("model", aiResponse);
         UI.hideTyping();
