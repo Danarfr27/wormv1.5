@@ -72,7 +72,8 @@ function readFileAsBase64(file) {
 }
 
 async function attachSelectedFileToMessage(messageText) {
-    if (!fileInput || !fileInput.files || fileInput.files.length === 0) return null;
+    // If no file is selected, return the original message text so user bubble shows correctly
+    if (!fileInput || !fileInput.files || fileInput.files.length === 0) return messageText;
 
     const file = fileInput.files[0];
     const parsedUpload = await parseUploadFileText(file);
@@ -163,7 +164,11 @@ async function handleSendMessage() {
             console.warn('AI backend unavailable, using fallback response', response.status);
         }
 
-        const aiResponse = extractAiReplyText(data) || buildFallbackAiReply(message);
+        // Prefer explicit `message` field from our backend (chat.js),
+        // fall back to other shapes parsed by `extractAiReplyText`.
+        const aiResponse = (data && typeof data.message === 'string' && data.message.trim())
+            ? data.message.trim()
+            : (extractAiReplyText(data) || buildFallbackAiReply(message));
 
         State.addToConversation("model", aiResponse);
         UI.hideTyping();

@@ -149,7 +149,6 @@ export function extractAiReplyText(payload) {
 export function buildFallbackAiReply(userMessage) {
     const cleaned = typeof userMessage === 'string' ? userMessage.trim() : '';
     if (!cleaned) {
-        return 'Halo! Saya menerima pesan Anda. Backend AI saat ini belum tersedia, jadi saya memberikan balasan sementara.';
+        return 'Lu Kebanyakan Nyepam sih memek, wajar apikey lu kena Limit. Bentar gw cariin apikey yang lain biar lu bisa bacot sama gw !.';
     }
-    return `Saya menerima pesan Anda: "${cleaned}". Backend AI sedang tidak tersedia saat ini, jadi saya memberikan balasan sementara.`;
 }
