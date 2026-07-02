@@ -93,6 +93,15 @@ export default async function handler(req, res) {
     return res.status(200).json(finalData);
   } else {
     // Jika semua key sudah dicoba dan gagal semua
+    // Jika penyebab utama adalah rate limit (429), kembalikan pesan yang lebih informatif.
+    if (lastError && lastError.status === 429) {
+      return res.status(429).json({
+        error: 'Rate limit',
+        message: 'Semua API key mencapai batas pemakaian (rate limit). saya akan gunakan API key lain atau tunggu reset kuota.',
+        details: lastError
+      });
+    }
+
     return res.status(lastError?.status || 500).json({
       error: 'Generation failed',
       message: 'Semua API Key sedang sibuk atau bermasalah.',
