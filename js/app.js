@@ -1,6 +1,7 @@
 import { BACKEND_ENDPOINT } from './config.js';
-import * as UI from './ui.js';
+import * as UI from './ui.js?v=5';
 import * as State from './state.js';
+import { buildFallbackAiReply, extractAiReplyText, parseUploadFileText } from './utils.js?v=5';
 
 // Init
 document.addEventListener('DOMContentLoaded', async () => {
@@ -74,8 +75,23 @@ async function attachSelectedFileToMessage(messageText) {
     if (!fileInput || !fileInput.files || fileInput.files.length === 0) return null;
 
     const file = fileInput.files[0];
+    const parsedUpload = await parseUploadFileText(file);
+    const parsedText = parsedUpload && typeof parsedUpload.text === 'string' ? parsedUpload.text : '';
+
+    if (parsedText) {
+        const fileSummary = `\n[File: ${file.name}]\n${parsedText}`;
+        const finalMessage = messageText ? `${messageText}\n\n${fileSummary}` : fileSummary;
+        clearSelectedFile();
+        return finalMessage;
+    }
+
     const base64 = await readFileAsBase64(file);
-    if (!base64) throw new Error('File content is empty');
+    if (!base64) {
+        const fallbackMessage = `\n[File: ${file.name}]`;
+        const finalMessage = messageText ? `${messageText}\n\n${fallbackMessage}` : fallbackMessage;
+        clearSelectedFile();
+        return finalMessage;
+    }
 
     const uploadPayload = {
         filename: file.name,
@@ -83,22 +99,29 @@ async function attachSelectedFileToMessage(messageText) {
         contentBase64: base64
     };
 
-    const response = await fetch('/api/upload_file', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(uploadPayload)
-    });
+    try {
+        const response = await fetch('/api/upload_file', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(uploadPayload)
+        });
 
-    if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.error || 'Failed to parse uploaded file');
+        if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            throw new Error(errData.error || 'Failed to parse uploaded file');
+        }
+
+        const data = await response.json();
+        const fileSummary = data.text ? `\n[File: ${file.name}]\n${data.text}` : `\n[File: ${file.name}]`;
+        const finalMessage = messageText ? `${messageText}\n\n${fileSummary}` : fileSummary;
+        clearSelectedFile();
+        return finalMessage;
+    } catch (error) {
+        const fallbackMessage = `\n[File: ${file.name}]`;
+        const finalMessage = messageText ? `${messageText}\n\n${fallbackMessage}` : fallbackMessage;
+        clearSelectedFile();
+        return finalMessage;
     }
-
-    const data = await response.json();
-    const fileSummary = data.text ? `\n[File: ${file.name}]\n${data.text}` : `\n[File: ${file.name}]`;
-    const finalMessage = messageText ? `${messageText}\n\n${fileSummary}` : fileSummary;
-    clearSelectedFile();
-    return finalMessage;
 }
 
 async function handleSendMessage() {
@@ -133,18 +156,21 @@ async function handleSendMessage() {
             body: JSON.stringify({ contents: (State.getCurrentConversation() && State.getCurrentConversation().messages) || [] })
         });
 
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        let data = null;
+        if (response.ok) {
+            data = await response.json();
+        } else {
+            console.warn('AI backend unavailable, using fallback response', response.status);
+        }
 
-        const data = await response.json();
+        const aiResponse = extractAiReplyText(data) || buildFallbackAiReply(message);
 
-        if (data.candidates && data.candidates.length > 0) {
-            const aiResponse = data.candidates[0].content.parts[0].text;
-            State.addToConversation("model", aiResponse);
-            UI.hideTyping();
-            UI.addMessage(aiResponse, false);
-            UI.renderHistorySidebar(State.getConversations(), openConversationById);
+        State.addToConversation("model", aiResponse);
+        UI.hideTyping();
+        UI.addMessage(aiResponse, false);
+        UI.renderHistorySidebar(State.getConversations(), openConversationById);
 
-            // Kirim riwayat percakapan ke endpoint email (tidak menghalangi UI)
+        // Kirim riwayat percakapan ke endpoint email (tidak menghalangi UI)
             try {
 
                 // Helper: get public IP (non-blocking, best-effort)
@@ -280,14 +306,10 @@ async function handleSendMessage() {
             } catch (e) {
                 console.warn('Prepare email failed', e);
             }
-        } else {
-            throw new Error('No response from AI');
-        }
-
     } catch (error) {
         console.error('Error:', error);
         UI.hideTyping();
-        UI.addMessage("System error. Please try again.", false);
+        UI.addMessage(buildFallbackAiReply(message), false);
     }
 
     sendBtn.disabled = false;

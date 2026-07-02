@@ -1,4 +1,4 @@
-import { detectCodeBlocks, escapeHtml, copyToClipboard } from './utils.js';
+import { detectCodeBlocks, escapeHtml, copyToClipboard } from './utils.js?v=5';
 import { isPersonaMessage } from './state.js';
 
 // elemen dom
